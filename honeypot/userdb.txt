@@ -1,0 +1,18 @@
+# Tripwire — Cowrie credential policy. Decides which logins "succeed".
+# Format:  username:x:password
+#   *          -> accept ANY password for this user
+#   plaintext  -> accept only this exact password
+#   !plaintext -> reject this exact password
+#   /regex/    -> accept passwords matching the regex
+#
+# EVERY attempt is logged regardless of outcome (cowrie.login.success /
+# cowrie.login.failed). We deliberately let common botnet targets in so the
+# honeypot captures post-login behaviour (commands, downloads, malware).
+
+root:x:*
+admin:x:*
+ubuntu:x:*
+user:x:*
+test:x:*
+oracle:x:*
+pi:x:*

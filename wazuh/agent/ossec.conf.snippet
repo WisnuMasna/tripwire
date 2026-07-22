@@ -1,0 +1,25 @@
+<!-- Phase 2 — reference for what install-agent.sh puts in the honeypot agent's
+     /var/ossec/etc/ossec.conf. The install script sets <client> via the
+     WAZUH_MANAGER env at install time and injects the <localfile> block. -->
+
+<!-- Point the agent at the manager over the Tailscale tunnel (its 100.x IP). -->
+<client>
+  <server>
+    <address>MANAGER_TAILSCALE_IP</address>
+    <port>1514</port>
+    <protocol>tcp</protocol>
+  </server>
+  <enrollment>
+    <enabled>yes</enabled>
+    <manager_address>MANAGER_TAILSCALE_IP</manager_address>
+    <port>1515</port>
+    <agent_name>tripwire-honeypot</agent_name>
+  </enrollment>
+</client>
+
+<!-- Ship Cowrie's JSON session log. logcollector runs as root, so it can read
+     the file regardless of the 777 dir perms. -->
+<localfile>
+  <log_format>json</log_format>
+  <location>/opt/tripwire/honeypot/var/log/cowrie/cowrie.json</location>
+</localfile>

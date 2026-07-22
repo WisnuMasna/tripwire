@@ -1,0 +1,38 @@
+name: tripwire-honeypot
+
+# Phase 1 — Cowrie SSH/Telnet honeypot.
+# Emits structured session events to var/log/cowrie/cowrie.json, which the
+# Wazuh agent (Phase 2) tails and ships to the manager.
+
+services:
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: tripwire-cowrie
+    restart: unless-stopped
+
+    # Attacker-facing ports.
+    #   LOCAL testing  -> defaults 2222/2223 (no clash with your real SSH).
+    #   ON THE VPS     -> set SSH_LISTEN_PORT=22 and TELNET_LISTEN_PORT=23 in .env
+    #                     ONLY AFTER moving the host's real sshd to a high port
+    #                     (e.g. 64295) so you don't lock yourself out.
+    ports:
+      - "${SSH_LISTEN_PORT:-2222}:2222"        # attacker SSH    -> Cowrie SSH
+      - "${TELNET_LISTEN_PORT:-2223}:2223"     # attacker Telnet -> Cowrie Telnet
+
+    volumes:
+      - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      - ./userdb.txt:/cowrie/cowrie-git/etc/userdb.txt:ro
+      # Bind-mounted so the Wazuh agent / Filebeat on the host can read cowrie.json.
+      # Cowrie's image runs as a named 'cowrie' user (non-1000 uid), so ./var is
+      # made world-writable by ./setup.sh — otherwise Cowrie can't write its SSH
+      # host key and port 22 stays dead while telnet still works.
+      - ./var:/cowrie/cowrie-git/var
+
+    # Cowrie needs no outbound access beyond DNS; the isolation requirement in
+    # the spec means this box should not be able to pivot anywhere if popped.
+    networks:
+      - honeypot-net
+
+networks:
+  honeypot-net:
+    driver: bridge

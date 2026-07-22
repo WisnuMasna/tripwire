@@ -1,0 +1,9 @@
+# Phase 3 — triage service dependencies.
+fastapi
+uvicorn[standard]
+httpx
+anthropic
+supabase
+pydantic
+pydantic-settings
+python-dotenv

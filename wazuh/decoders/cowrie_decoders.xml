@@ -1,0 +1,12 @@
+<!--
+  Tripwire — Cowrie decoders.
+
+  INTENTIONALLY EMPTY. Cowrie logs are already JSON, and the honeypot agent
+  ships them with <log_format>json</log_format>, so Wazuh's built-in json
+  decoder extracts every field (eventid, src_ip, username, password, input,
+  session, duration, ...) automatically. The classification/scoring happens in
+  ../rules/cowrie_rules.xml.
+
+  This file is kept as a placeholder in case a future Cowrie output needs
+  reshaping (e.g. a non-JSON secondary log). Nothing to install for now.
+-->

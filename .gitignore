@@ -1,0 +1,41 @@
+# ── VirtualBox VM artifacts (this folder doubles as a VM directory) ──────────
+# NEVER commit these — TheHive.vdi alone is ~43 GB.
+*.vdi
+*.vbox
+*.vbox-prev
+*.viso
+*-preseed.cfg
+*-grub.cfg
+*-vboxpostinstall.sh
+Snapshots/
+Logs/
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+**/.env
+!**/.env.example
+!.env.example
+
+# ── Cowrie runtime data (logs, downloads, tty captures, fs state) ────────────
+honeypot/var/
+
+# ── Wazuh lab secrets / generated certs ──────────────────────────────────────
+wazuh-lab/.env
+wazuh-lab/certs/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# ── Node / Next.js (dashboard) ───────────────────────────────────────────────
+node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.vercel/
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+.DS_Store
+*.log
