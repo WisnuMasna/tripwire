@@ -55,6 +55,8 @@ def _merge(new: dict[str, dict]) -> None:
         p["started_at"] = p["started_at"] or s["started_at"]
         p["ended_at"] = s["ended_at"] or p["ended_at"]
         p["closed"] = p["closed"] or s["closed"]
+        if s["first_ts"] and (not p["first_ts"] or s["first_ts"] < p["first_ts"]):
+            p["first_ts"] = s["first_ts"]
         if s["last_ts"] and (not p["last_ts"] or s["last_ts"] > p["last_ts"]):
             p["last_ts"] = s["last_ts"]
 
@@ -71,7 +73,9 @@ async def _process(s: dict) -> None:
         "country": enr.get("country"),
         "asn": enr.get("asn"),
         "protocol": s.get("protocol"),
-        "started_at": s.get("started_at"),
+        # started_at is NOT NULL in the schema; fall back to the first event we
+        # saw when the session's connect event predates our polling window.
+        "started_at": s.get("started_at") or s.get("first_ts"),
         "ended_at": s.get("ended_at"),
         "usernames_tried": s.get("usernames_tried"),
         "passwords_tried": s.get("passwords_tried"),

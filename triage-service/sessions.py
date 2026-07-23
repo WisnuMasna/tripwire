@@ -29,6 +29,7 @@ def group_sessions(alerts: list[dict]) -> dict[str, dict]:
                 "commands_tried": [],
                 "started_at": None,
                 "ended_at": None,
+                "first_ts": None,   # fallback for started_at (see below)
                 "last_ts": None,
                 "closed": False,
             },
@@ -50,6 +51,11 @@ def group_sessions(alerts: list[dict]) -> dict[str, dict]:
         if eventid == "cowrie.session.closed":
             s["ended_at"] = ts
             s["closed"] = True
+        # A session whose connect event fell outside the polled window has no
+        # started_at, but the schema requires one — track the earliest event
+        # timestamp as a fallback.
+        if ts and (s["first_ts"] is None or ts < s["first_ts"]):
+            s["first_ts"] = ts
         if ts and (s["last_ts"] is None or ts > s["last_ts"]):
             s["last_ts"] = ts
 
