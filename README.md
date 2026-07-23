@@ -1,5 +1,7 @@
 # Tripwire — public honeypot + AI-triage pipeline
 
+### ▶ Live dashboard: **https://tripwire-chi.vercel.app**
+
 A real, internet-facing honeypot that attracts genuine attack traffic, pipes it
 through a detection stack, enriches every session with threat intel, has **Claude
 write a plain-English summary and risk score for each attack**, and surfaces it
