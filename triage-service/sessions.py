@@ -6,6 +6,15 @@ group on that and aggregate the credentials/commands seen across the session.
 from __future__ import annotations
 
 
+# Events that make a session worth spending an LLM call on, even if the
+# attacker never reached an interactive shell.
+HIGH_SIGNAL_EVENTS = {
+    "cowrie.session.file_download",
+    "cowrie.session.file_upload",
+    "cowrie.direct-tcpip.request",
+}
+
+
 def _dedupe(items: list[str]) -> list[str]:
     return list(dict.fromkeys(i for i in items if i))
 
@@ -32,6 +41,7 @@ def group_sessions(alerts: list[dict]) -> dict[str, dict]:
                 "first_ts": None,   # fallback for started_at (see below)
                 "last_ts": None,
                 "closed": False,
+                "high_signal": False,
             },
         )
 
@@ -51,6 +61,8 @@ def group_sessions(alerts: list[dict]) -> dict[str, dict]:
         if eventid == "cowrie.session.closed":
             s["ended_at"] = ts
             s["closed"] = True
+        if eventid in HIGH_SIGNAL_EVENTS:
+            s["high_signal"] = True
         # A session whose connect event fell outside the polled window has no
         # started_at, but the schema requires one — track the earliest event
         # timestamp as a fallback.

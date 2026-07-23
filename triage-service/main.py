@@ -22,7 +22,13 @@ from supabase_writer import upsert_session
 
 _STATE_FILE = Path(__file__).parent / ".state_since"
 
-state = {"processed_total": 0, "pending": 0, "last_error": None}
+state = {
+    "processed_total": 0,
+    "triaged_by_ai": 0,          # sessions worth a Claude call
+    "triaged_heuristically": 0,  # trivial scans summarised without the LLM
+    "pending": 0,
+    "last_error": None,
+}
 _pending: dict[str, dict] = {}
 _processed: set[str] = set()
 
@@ -55,10 +61,36 @@ def _merge(new: dict[str, dict]) -> None:
         p["started_at"] = p["started_at"] or s["started_at"]
         p["ended_at"] = s["ended_at"] or p["ended_at"]
         p["closed"] = p["closed"] or s["closed"]
+        p["high_signal"] = p["high_signal"] or s["high_signal"]
         if s["first_ts"] and (not p["first_ts"] or s["first_ts"] < p["first_ts"]):
             p["first_ts"] = s["first_ts"]
         if s["last_ts"] and (not p["last_ts"] or s["last_ts"] > p["last_ts"]):
             p["last_ts"] = s["last_ts"]
+
+
+def _heuristic(s: dict, enr: dict) -> tuple[str, list[str], int]:
+    """Summarise a trivial session without spending an LLM call.
+
+    The honeypot is scanned continuously and the overwhelming majority of
+    sessions are a bare connect or one failed login. Those are always
+    notability 1, so paying for a Claude call on each is wasted spend.
+    """
+    proto = (s.get("protocol") or "ssh").upper()
+    where = enr.get("country") or "an unknown location"
+    tried = len(s.get("usernames_tried") or [])
+    if tried:
+        return (
+            f"Automated {proto} login scan from {s['source_ip']} ({where}). Tried "
+            f"{tried} credential pair(s) and disconnected without running any commands.",
+            ["T1110: Brute Force"],
+            1,
+        )
+    return (
+        f"Bare {proto} connection from {s['source_ip']} ({where}) with no login "
+        f"attempt — port scan or banner grab.",
+        ["T1595: Active Scanning"],
+        1,
+    )
 
 
 async def _process(s: dict) -> None:
@@ -66,7 +98,17 @@ async def _process(s: dict) -> None:
     if not ip:
         return  # schema requires source_ip
     enr = await enrich_ip(ip)
-    triage = await triage_session({**s, **enr})
+
+    # Only spend a Claude call when the attacker actually did something.
+    if s.get("commands_tried") or s.get("high_signal"):
+        triage = await triage_session({**s, **enr})
+        summary, techniques, score = (
+            triage.summary, triage.mitre_techniques, triage.notability_score
+        )
+        state["triaged_by_ai"] += 1
+    else:
+        summary, techniques, score = _heuristic(s, enr)
+        state["triaged_heuristically"] += 1
     row = {
         "cowrie_session": s["cowrie_session"],
         "source_ip": ip,
@@ -82,13 +124,14 @@ async def _process(s: dict) -> None:
         "commands_tried": s.get("commands_tried"),
         "abuseipdb_score": enr.get("abuseipdb_score"),
         "vt_malicious_count": enr.get("vt_malicious_count"),
-        "mitre_techniques": triage.mitre_techniques,
-        "ai_summary": triage.summary,
-        "ai_notability_score": triage.notability_score,
+        "mitre_techniques": techniques,
+        "ai_summary": summary,
+        "ai_notability_score": score,
     }
     await asyncio.to_thread(upsert_session, row)
     state["processed_total"] += 1
-    print(f"[triage] {ip} score={triage.notability_score}: {triage.summary[:80]}")
+    tag = "ai " if (s.get("commands_tried") or s.get("high_signal")) else "fast"
+    print(f"[{tag}] {ip} score={score}: {summary[:80]}")
 
 
 async def _flush() -> None:
