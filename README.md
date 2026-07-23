@@ -10,6 +10,28 @@ all on a public, auto-updating dashboard.
 Not a simulation — the honeypot runs on a live public IP and starts logging real
 scanner and botnet activity within minutes of coming online.
 
+![Tripwire dashboard](docs/dashboard.png)
+
+## What it actually catches
+
+Within the first day the honeypot logged **428 sessions from 16 IPs across 12
+countries**, and **112 of those attackers got far enough to run commands**. The
+credentials they tried are exactly what you'd hope to see: `root` / `123456`,
+`developer`, `deploy`, `ubuntu`.
+
+The interesting part is what happens *after* they get in. Claude's writeup of one
+session, verbatim:
+
+> An automated attacker logged in with a default root password and immediately
+> tried to plant its own SSH public key into the server's `authorized_keys` file,
+> a common technique for maintaining persistent access to compromised machines.
+> The attacker also attempted to lock down the `.ssh` directory permissions to
+> prevent other attackers from overwriting their key.
+
+Multiple independent botnets did the same thing — clearing immutable file flags,
+wiping `authorized_keys`, installing their own key, then locking the directory
+behind them. Competing for exclusive ownership of the same compromised host.
+
 ## Architecture
 
 ```mermaid
