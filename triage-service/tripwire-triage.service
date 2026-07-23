@@ -1,0 +1,37 @@
+# systemd unit for the Tripwire triage service.
+#
+# Install (paths assume the repo is cloned to ~/tripwire for user `wis` —
+# adjust User/Group/paths if yours differ):
+#
+#   sudo cp triage-service/tripwire-triage.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now tripwire-triage
+#
+# Inspect:
+#   systemctl status tripwire-triage
+#   journalctl -u tripwire-triage -f
+
+[Unit]
+Description=Tripwire honeypot triage service (Wazuh -> enrich -> Claude -> Supabase)
+Documentation=https://github.com/WisnuMasna/tripwire
+# The Wazuh indexer it polls runs in Docker on this host.
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wis
+Group=wis
+# WorkingDirectory matters: config.py loads the shared ../.env relative to it.
+WorkingDirectory=/home/wis/tripwire/triage-service
+ExecStart=/home/wis/tripwire/triage-service/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+# The poll loop already swallows transient errors; this covers hard crashes and
+# the indexer not being ready yet at boot.
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tripwire-triage
+
+[Install]
+WantedBy=multi-user.target

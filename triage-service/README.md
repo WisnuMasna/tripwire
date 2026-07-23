@@ -42,10 +42,40 @@ The loop starts automatically. Watch it:
 ```bash
 curl -s localhost:8000/health    # {"status":"ok","processed_total":N,"pending":M,...}
 ```
-and its stdout prints one line per triaged session:
+and it prints one line per triaged session — `[ai]` when Claude wrote the
+summary, `[fast]` when it was a trivial scan handled without an LLM call:
 ```
-[triage] 195.178.110.217 score=3: Automated scanner ran OS-fingerprinting commands...
+[ai]   195.178.110.217 score=3: Automated scanner ran OS-fingerprinting commands...
+[fast] 45.153.34.235   score=1: Automated SSH login scan from 45.153.34.235 (The Netherlands)...
 ```
+
+## Run it as a service (survives reboots)
+
+`uvicorn` in a terminal dies with your shell. For anything long-lived, install
+the bundled systemd unit:
+
+```bash
+sudo cp triage-service/tripwire-triage.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tripwire-triage
+```
+
+```bash
+systemctl status tripwire-triage      # is it up?
+journalctl -u tripwire-triage -f      # live triage output
+sudo systemctl restart tripwire-triage
+```
+
+It starts after Docker (the Wazuh indexer it polls runs there) and restarts
+automatically on failure.
+
+## Cost control
+
+The honeypot is scanned continuously and most sessions are a bare connect or a
+single failed login. Those are summarised from a template and never reach the
+API — Claude is spent only on sessions where the attacker ran commands,
+transferred a file, or attempted a tunnel. `/health` reports the split via
+`triaged_by_ai` and `triaged_heuristically`.
 
 ## Verify end to end
 
