@@ -39,3 +39,8 @@ dashboard/.vercel/
 # ── Misc ─────────────────────────────────────────────────────────────────────
 .DS_Store
 *.log
+
+# Next.js dashboard
+dashboard/node_modules/
+dashboard/.next/
+dashboard/.env.local

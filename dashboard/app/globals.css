@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #020617;
+  color: #e2e8f0;
+}
+
+/* Subtle pulse for the "live" indicator */
+@keyframes livepulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.live-dot {
+  animation: livepulse 1.8s ease-in-out infinite;
+}
