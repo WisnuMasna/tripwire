@@ -24,6 +24,9 @@ User=wis
 Group=wis
 # WorkingDirectory matters: config.py loads the shared ../.env relative to it.
 WorkingDirectory=/home/wis/tripwire/triage-service
+# Without this Python block-buffers stdout (it is a pipe, not a TTY), so triage
+# lines sit in a buffer and `journalctl -f` looks dead while the service runs.
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/wis/tripwire/triage-service/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 # The poll loop already swallows transient errors; this covers hard crashes and
 # the indexer not being ready yet at boot.
