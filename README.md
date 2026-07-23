@@ -81,8 +81,11 @@ outbound Tailscale tunnel — so a compromise can't pivot anywhere.
 | 0 | Isolated VPS provisioning (cloud-init) | ✅ live |
 | 1 | Cowrie SSH/Telnet honeypot | ✅ capturing real attacks |
 | 2 | Wazuh agent + custom Cowrie rules | ✅ alerts scored & MITRE-tagged |
-| 3 | FastAPI triage — enrich + Claude scoring | 🔨 built, pending API keys |
-| 4 | Next.js public dashboard | ⬜ scaffolded |
+| 3 | FastAPI triage — enrich + Claude scoring | ✅ running under systemd, writing to Supabase |
+| 4 | Next.js public dashboard | ✅ [deployed](https://tripwire-chi.vercel.app) |
+
+Every stage runs against live internet traffic — nothing in the pipeline is
+mocked or replayed.
 
 ## What the AI triage produces
 
