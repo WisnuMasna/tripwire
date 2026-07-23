@@ -1,62 +1,119 @@
-# Tripwire — public honeypot + AI-triage dashboard
+# Tripwire — public honeypot + AI-triage pipeline
 
 A real, internet-facing honeypot that attracts genuine attack traffic, pipes it
-through a detection stack, enriches each session with threat intel, has Claude
-write a plain-English summary and risk score for every attack, and surfaces it
+through a detection stack, enriches every session with threat intel, has **Claude
+write a plain-English summary and risk score for each attack**, and surfaces it
 all on a public, auto-updating dashboard.
 
-Portfolio piece. Priorities: works end-to-end against real attackers, looks good
-in a 30-second screen recording, and is safely isolated.
+Not a simulation — the honeypot runs on a live public IP and starts logging real
+scanner and botnet activity within minutes of coming online.
 
 ## Architecture
 
-```
-Internet attackers
-      → Cowrie honeypot (Docker, isolated VPS)        [honeypot/]   Phase 1  ✅
-      → Wazuh agent ships cowrie.json → Wazuh manager  [wazuh/]      Phase 2
-      → FastAPI triage: enrich + Claude summary/score  [triage-service/] Phase 3
-      → Supabase Postgres (RLS, read-only public)      [db/schema.sql]
-      → Next.js dashboard on Vercel                    [dashboard/]  Phase 4
+```mermaid
+flowchart TD
+    ATK["Internet attackers"]
+
+    subgraph VPS["Honeypot VPS - isolated, disposable"]
+        COW["Cowrie<br/>SSH + Telnet honeypot"]
+        LOG[("cowrie.json<br/>session events")]
+        AGT["Wazuh agent"]
+        COW --> LOG --> AGT
+    end
+
+    subgraph DET["Detection stack"]
+        MGR["Wazuh manager<br/>custom Cowrie rules 100100-100108"]
+        IDX[("Wazuh indexer<br/>scored, MITRE-tagged alerts")]
+        MGR --> IDX
+    end
+
+    subgraph TRI["Triage service - FastAPI"]
+        GRP["Group alerts into sessions"]
+        ENR["Enrich source IP<br/>GeoIP, AbuseIPDB, VirusTotal"]
+        AI["Claude<br/>summary, technique tags,<br/>notability score 1-5"]
+        GRP --> ENR --> AI
+    end
+
+    DB[("Supabase Postgres<br/>RLS: public read-only")]
+    DASH["Next.js dashboard on Vercel<br/>live feed, world map, notable attacks"]
+    VIS["Public visitors"]
+
+    ATK -->|"SSH :22, Telnet :23"| COW
+    AGT -->|"Tailscale tunnel"| MGR
+    IDX -->|"poll new sessions"| GRP
+    AI --> DB
+    DB --> DASH
+    DASH --> VIS
 ```
 
-The Wazuh manager already runs locally in [`wazuh-lab/`](wazuh-lab) (v4.9.2,
-API on `55000`) — Phase 2 reuses it rather than standing up a new one.
+The honeypot is deliberately the only thing on its VPS, with the real `sshd`
+moved to a high port and no path back into the detection stack except an
+outbound Tailscale tunnel — so a compromise can't pivot anywhere.
+
+## Status
+
+| Phase | What | Status |
+|-------|------|--------|
+| 0 | Isolated VPS provisioning (cloud-init) | ✅ live |
+| 1 | Cowrie SSH/Telnet honeypot | ✅ capturing real attacks |
+| 2 | Wazuh agent + custom Cowrie rules | ✅ alerts scored & MITRE-tagged |
+| 3 | FastAPI triage — enrich + Claude scoring | 🔨 built, pending API keys |
+| 4 | Next.js public dashboard | ⬜ scaffolded |
+
+## What the AI triage produces
+
+Each attacker session is reduced to a structured assessment (guaranteed-valid
+JSON via Claude's structured outputs), which is what the dashboard renders:
+
+```json
+{
+  "summary": "An automated scanner logged in with root/123456 and immediately fingerprinted the OS, then tried to fetch a second-stage payload. Typical commodity botnet enrollment attempt.",
+  "mitre_techniques": ["T1110: Brute Force", "T1059: Command and Scripting Interpreter", "T1105: Ingress Tool Transfer"],
+  "notability_score": 3,
+  "notability_reason": "Standard automated behaviour, but it did attempt a payload download."
+}
+```
+
+The system prompt driving this lives in
+[`triage-service/prompts/triage_prompt.md`](triage-service/prompts/triage_prompt.md)
+so the AI's voice can be tuned without touching code.
 
 ## Repo layout
 
-| Path | Phase | Status |
-|------|-------|--------|
-| [`honeypot/`](honeypot) | 1 — Cowrie SSH/Telnet honeypot | **built + testable** |
-| [`wazuh/`](wazuh) | 2 — custom decoders/rules + agent config | scaffold |
-| [`triage-service/`](triage-service) | 3 — FastAPI enrich + Claude triage | scaffold |
-| [`db/schema.sql`](db/schema.sql) | 3 — Supabase table + RLS | ready to run |
-| [`dashboard/`](dashboard) | 4 — Next.js public dashboard | scaffold |
-| `.env.example` | — | copy to `.env`, fill per phase |
+| Path | What's in it |
+|------|--------------|
+| [`honeypot/`](honeypot) | Cowrie config + Docker Compose, and `deploy/` cloud-init for Oracle / GCP / DigitalOcean |
+| [`wazuh/`](wazuh) | Custom Cowrie detection rules, agent install script, manager rule installer |
+| [`triage-service/`](triage-service) | FastAPI service: indexer polling, session grouping, IP enrichment, Claude triage, Supabase writes |
+| [`db/schema.sql`](db/schema.sql) | Supabase table + row-level security (public read-only) |
+| [`dashboard/`](dashboard) | Next.js public dashboard (Phase 4) |
+| `.env.example` | Every config value, grouped by service |
 
-## Quick start (Phase 1)
+## Quick start — run the honeypot locally
 
 ```bash
 cd honeypot
 ./setup.sh
 docker compose up -d
-./test-connection.sh
+./test-connection.sh     # drives a fake SSH session, asserts it hit cowrie.json
 ```
 
-See [`honeypot/README.md`](honeypot/README.md) for the VPS deployment + isolation
-checklist (spec §4 — non-negotiable).
+For the real internet-facing deployment (and the non-negotiable isolation
+checklist), see [`honeypot/deploy/README.oracle.md`](honeypot/deploy/README.oracle.md).
 
-## Build order
+## Tech
 
-Phases are independently testable and built in order: **1 → 2 → 3 → 4 → 5 (polish)**.
-Phase 0 (VPS, Supabase project, API keys) is manual and done outside this repo.
+Cowrie · Docker · Wazuh 4.9 · Tailscale · Python / FastAPI · Claude API
+(structured outputs) · Supabase (Postgres + RLS) · Next.js · Vercel
 
-## Safety / disclaimer
+## Safety & ethics
 
-Passive logging only. No counter-hacking. Source IPs shown on the dashboard are
-attacker-controlled or spoofed addresses, surfaced for situational awareness, not
-doxxing. The honeypot is emulated (Cowrie) and isolated; it is never actually
-compromised.
+Passive logging only — **no counter-hacking, no active scanning, no retaliation.**
+The honeypot is emulated (Cowrie); it is never actually compromised, and it
+cannot be used as a relay. Source IPs shown are attacker-controlled or spoofed
+addresses, surfaced for situational awareness rather than attribution or
+doxxing. Nothing here targets a person.
 
-> This folder is also a VirtualBox VM directory. `.gitignore` excludes the VM
-> disk/snapshots (`*.vdi`, `Snapshots/`, …) and all secrets. `git init` has **not**
-> been run — do that yourself when ready.
+## License
+
+[MIT](LICENSE)
