@@ -1,4 +1,5 @@
 import type { Session } from "@/lib/types";
+import { VerdictBadge } from "./disposition";
 
 function ago(iso: string) {
   const secs = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -48,6 +49,7 @@ export default function LiveFeed({ sessions }: { sessions: Session[] }) {
               <span className="text-xs uppercase text-slate-600">
                 {s.protocol ?? "ssh"}
               </span>
+              <VerdictBadge verdict={s.verdict} />
               <span className="ml-auto text-xs tabular-nums text-slate-500">
                 {ago(s.started_at)}
               </span>

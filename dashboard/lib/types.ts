@@ -15,5 +15,7 @@ export type Session = {
   mitre_techniques: string[] | null;
   ai_summary: string | null;
   ai_notability_score: number | null;
+  verdict: string | null;              // malicious | suspicious | reconnaissance | noise
+  recommended_action: string | null;   // escalate | block | monitor | dismiss
   created_at: string;
 };

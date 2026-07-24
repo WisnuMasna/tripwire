@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Session } from "@/lib/types";
+import { VerdictBadge, ActionBadge } from "./disposition";
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -34,12 +35,14 @@ function Card({ s }: { s: Session }) {
           {score}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-x-2 text-sm">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <span className="font-mono text-slate-200">{s.source_ip}</span>
             {s.country && <span className="text-slate-400">{s.country}</span>}
             {s.asn && (
               <span className="truncate text-xs text-slate-600">{s.asn}</span>
             )}
+            <VerdictBadge verdict={s.verdict} />
+            <ActionBadge action={s.recommended_action} />
           </span>
           <span className="mt-1 block text-sm leading-snug text-slate-400">
             {s.ai_summary}
