@@ -34,9 +34,11 @@ class Settings(BaseSettings):
     slack_notify_threshold: int = 4
 
     # TheHive case creation (SOAR tier 2). Blank api_key = disabled.
+    # Threshold 3 (lower than Slack's 4) so the SOAR opens + auto-dispositions
+    # routine cases too, while only pinging a human on Slack for score >= 4.
     thehive_url: str = "http://localhost:9000"
     thehive_api_key: str | None = None
-    thehive_case_threshold: int = 4
+    thehive_case_threshold: int = 3
 
 
 settings = Settings()  # raises at import if required vars are missing

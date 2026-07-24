@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 import anthropic
 from pydantic import BaseModel, Field
@@ -20,6 +21,9 @@ class TriageResult(BaseModel):
     mitre_techniques: list[str] = Field(default_factory=list)
     notability_score: int          # 1-5
     notability_reason: str
+    # Analyst disposition (Stage 1): the classification and the next action.
+    verdict: Literal["malicious", "suspicious", "reconnaissance", "noise"]
+    recommended_action: Literal["escalate", "block", "monitor", "dismiss"]
 
 
 _PROMPT = (Path(__file__).parent / "prompts" / "triage_prompt.md").read_text(encoding="utf-8")

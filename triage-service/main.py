@@ -70,12 +70,14 @@ def _merge(new: dict[str, dict]) -> None:
             p["last_ts"] = s["last_ts"]
 
 
-def _heuristic(s: dict, enr: dict) -> tuple[str, list[str], int]:
-    """Summarise a trivial session without spending an LLM call.
+def _heuristic(s: dict, enr: dict) -> tuple[str, list[str], int, str, str]:
+    """Disposition a trivial session without spending an LLM call.
 
     The honeypot is scanned continuously and the overwhelming majority of
     sessions are a bare connect or one failed login. Those are always
-    notability 1, so paying for a Claude call on each is wasted spend.
+    notability 1, so paying for a Claude call on each is wasted spend. We still
+    give them the same verdict + action fields an analyst would record.
+    Returns: (summary, techniques, score, verdict, recommended_action).
     """
     proto = (s.get("protocol") or "ssh").upper()
     where = enr.get("country") or "an unknown location"
@@ -86,12 +88,16 @@ def _heuristic(s: dict, enr: dict) -> tuple[str, list[str], int]:
             f"{tried} credential pair(s) and disconnected without running any commands.",
             ["T1110: Brute Force"],
             1,
+            "reconnaissance",
+            "monitor",
         )
     return (
         f"Bare {proto} connection from {s['source_ip']} ({where}) with no login "
         f"attempt — port scan or banner grab.",
         ["T1595: Active Scanning"],
         1,
+        "noise",
+        "dismiss",
     )
 
 
@@ -104,12 +110,11 @@ async def _process(s: dict) -> None:
     # Only spend a Claude call when the attacker actually did something.
     if s.get("commands_tried") or s.get("high_signal"):
         triage = await triage_session({**s, **enr})
-        summary, techniques, score = (
-            triage.summary, triage.mitre_techniques, triage.notability_score
-        )
+        summary, techniques, score = triage.summary, triage.mitre_techniques, triage.notability_score
+        verdict, action = triage.verdict, triage.recommended_action
         state["triaged_by_ai"] += 1
     else:
-        summary, techniques, score = _heuristic(s, enr)
+        summary, techniques, score, verdict, action = _heuristic(s, enr)
         state["triaged_heuristically"] += 1
     row = {
         "cowrie_session": s["cowrie_session"],
@@ -129,16 +134,19 @@ async def _process(s: dict) -> None:
         "mitre_techniques": techniques,
         "ai_summary": summary,
         "ai_notability_score": score,
+        "verdict": verdict,
+        "recommended_action": action,
     }
     await asyncio.to_thread(upsert_session, row)
     state["processed_total"] += 1
     tag = "ai " if (s.get("commands_tried") or s.get("high_signal")) else "fast"
-    print(f"[{tag}] {ip} score={score}: {summary[:80]}")
+    print(f"[{tag}] {ip} score={score} {verdict}/{action}: {summary[:70]}")
 
+    disp = {"verdict": verdict, "recommended_action": action}
     # SOAR tier 1: escalate high-notability attackers to Slack (no-op if unset).
-    await slack_notify.notify(s, enr, summary, techniques, score)
+    await slack_notify.notify(s, enr, summary, techniques, score, disp)
     # SOAR tier 2: open a TheHive case for the same (no-op if unset).
-    case_id = await thehive_client.create_case(s, enr, summary, techniques, score)
+    case_id = await thehive_client.create_case(s, enr, summary, techniques, score, disp)
     if case_id:
         print(f"[thehive] opened case {case_id} for {ip}")
 
@@ -216,6 +224,7 @@ async def test_slack() -> dict:
         "TEST MESSAGE — simulated notable attack to confirm Slack escalation is wired up.",
         ["T1105: Ingress Tool Transfer", "T1059: Command and Scripting Interpreter"],
         5,
+        {"verdict": "malicious", "recommended_action": "block"},
     )
     return {"sent": bool(settings.slack_webhook_url), "threshold": settings.slack_notify_threshold}
 
@@ -230,5 +239,20 @@ async def test_thehive() -> dict:
         "TEST CASE — simulated notable attack to confirm TheHive case creation is wired up.",
         ["T1105: Ingress Tool Transfer", "T1059: Command and Scripting Interpreter"],
         5,
+        {"verdict": "malicious", "recommended_action": "block"},
+    )
+    return {"enabled": bool(settings.thehive_api_key), "case_id": case_id}
+
+
+@app.post("/test-thehive-resolve")
+async def test_thehive_resolve() -> dict:
+    """Open a routine (monitor) case to verify the auto-resolve lifecycle path."""
+    case_id = await thehive_client.create_case(
+        {"source_ip": "203.0.113.8", "commands_tried": ["uname -a", "cat /proc/cpuinfo"]},
+        {"country": "Testland", "asn": "AS0 Example"},
+        "TEST CASE — routine reconnaissance, should be auto-resolved.",
+        ["T1082: System Information Discovery"],
+        3,
+        {"verdict": "reconnaissance", "recommended_action": "monitor"},
     )
     return {"enabled": bool(settings.thehive_api_key), "case_id": case_id}

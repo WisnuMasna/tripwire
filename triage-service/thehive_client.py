@@ -19,7 +19,7 @@ def _severity(score: int) -> int:
     return {5: 4, 4: 3}.get(score, 2)
 
 
-def _description(session: dict, enr: dict, summary: str, techniques: list[str], score: int) -> str:
+def _description(session: dict, enr: dict, summary: str, techniques: list[str], score: int, disp: dict) -> str:
     ip = session.get("source_ip", "?")
     loc = enr.get("country") or "unknown"
     asn = enr.get("asn")
@@ -27,6 +27,7 @@ def _description(session: dict, enr: dict, summary: str, techniques: list[str], 
     parts = [
         summary,
         "",
+        f"**Verdict:** {disp.get('verdict', 'n/a')}  |  **Recommended action:** {disp.get('recommended_action', 'n/a')}",
         f"**Source:** {ip} ({loc}" + (f", {asn}" if asn else "") + ")",
         f"**Notability:** {score}/5",
     ]
@@ -48,13 +49,18 @@ async def create_case(
     summary: str,
     techniques: list[str],
     score: int,
+    disp: dict | None = None,
 ) -> str | None:
     if not settings.thehive_api_key or score < settings.thehive_case_threshold:
         return None
+    disp = disp or {}
+    action = disp.get("recommended_action", "monitor")
 
     ip = session.get("source_ip", "?")
     loc = enr.get("country") or "unknown"
     tags = ["tripwire", "honeypot"]
+    if disp.get("verdict"):
+        tags.append(disp["verdict"])
     tags += [t.split(":")[0].strip() for t in techniques]
     if enr.get("country"):
         tags.append(enr["country"])
@@ -68,10 +74,11 @@ async def create_case(
                 "/api/case",
                 json={
                     "title": f"Honeypot attack from {ip} ({loc}) — score {score}/5",
-                    "description": _description(session, enr, summary, techniques, score),
+                    "description": _description(session, enr, summary, techniques, score, disp),
                     "severity": _severity(score),
                     "tlp": 2,
                     "pap": 2,
+                    "flag": action in ("escalate", "block"),  # flag the ones needing attention
                     "tags": tags,
                 },
             )
@@ -91,6 +98,20 @@ async def create_case(
                     "ioc": True,
                 },
             )
+
+            # Case lifecycle (the analyst loop): the SOAR auto-closes the routine
+            # dispositions and leaves the ones needing a human decision Open.
+            if action in ("monitor", "dismiss"):
+                await c.patch(
+                    f"/api/case/{case_id}",
+                    json={
+                        "status": "Resolved",
+                        "resolutionStatus": "TruePositive",  # it was a real attack, just low-severity
+                        "impactStatus": "NoImpact",          # a honeypot — nothing real was affected
+                        "summary": f"Auto-dispositioned by Tripwire triage: verdict '{disp.get('verdict', '?')}', "
+                                   f"recommended action '{action}'. Routine hostile traffic, no escalation needed.",
+                    },
+                )
             return case_id
     except Exception as e:  # never break triage
         print(f"thehive: {type(e).__name__}: {e}")

@@ -20,6 +20,7 @@ async def notify(
     summary: str,
     techniques: list[str],
     score: int,
+    disp: dict | None = None,
 ) -> None:
     if not settings.slack_webhook_url or score < settings.slack_notify_threshold:
         return
@@ -28,6 +29,7 @@ async def notify(
     loc = enr.get("country") or "unknown location"
     asn = enr.get("asn")
     cmds = session.get("commands_tried") or []
+    disp = disp or {}
 
     rep = []
     if enr.get("abuseipdb_score") is not None:
@@ -38,8 +40,12 @@ async def notify(
     lines = [
         f":rotating_light: *Notable attack — score {score}/5*",
         f"*{ip}* — {loc}" + (f" · {asn}" if asn else "") + (f" · {' · '.join(rep)}" if rep else ""),
-        summary,
     ]
+    if disp.get("verdict"):
+        lines.append(
+            f"*Verdict:* {disp['verdict']}   *Recommended action:* {disp.get('recommended_action', '?')}"
+        )
+    lines.append(summary)
     if techniques:
         lines.append("*MITRE:* " + ", ".join(techniques))
     if cmds:

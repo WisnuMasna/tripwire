@@ -23,8 +23,15 @@ create table if not exists sessions (
   mitre_techniques    text[],
   ai_summary          text,
   ai_notability_score int,                -- 1-5
+  verdict             text,               -- analyst disposition: malicious | suspicious | reconnaissance | noise
+  recommended_action  text,               -- escalate | block | monitor | dismiss
   created_at          timestamptz default now()
 );
+
+-- Stage 1 (disposition) added verdict + recommended_action after the table
+-- already existed. Safe to run on an existing table:
+alter table sessions add column if not exists verdict text;
+alter table sessions add column if not exists recommended_action text;
 
 -- Dashboard query paths.
 create index if not exists sessions_started_at_idx  on sessions (started_at desc);
