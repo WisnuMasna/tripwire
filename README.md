@@ -62,10 +62,17 @@ flowchart TD
     DASH["Next.js dashboard on Vercel<br/>live feed, world map, notable attacks"]
     VIS["Public visitors"]
 
+    subgraph SOAR["Escalation - score &ge; 4 only"]
+        SLK["Slack alert"]
+        TH["TheHive case<br/>+ IP as IOC observable"]
+    end
+
     ATK -->|"SSH :22, Telnet :23"| COW
     AGT -->|"Tailscale tunnel"| MGR
     IDX -->|"poll new sessions"| GRP
     AI --> DB
+    AI -->|"notable attackers only"| SLK
+    AI --> TH
     DB --> DASH
     DASH --> VIS
 ```
@@ -83,9 +90,27 @@ outbound Tailscale tunnel — so a compromise can't pivot anywhere.
 | 2 | Wazuh agent + custom Cowrie rules | ✅ alerts scored & MITRE-tagged |
 | 3 | FastAPI triage — enrich + Claude scoring | ✅ running under systemd, writing to Supabase |
 | 4 | Next.js public dashboard | ✅ [deployed](https://tripwire-chi.vercel.app) |
+| 5 | SOAR escalation — Slack + TheHive | ✅ notable attackers auto-escalated |
 
 Every stage runs against live internet traffic — nothing in the pipeline is
 mocked or replayed.
+
+## Escalation (SOAR)
+
+The dashboard is passive; the pipeline is not. When Claude scores a session
+**≥ 4/5**, it's escalated the same way a SOC would handle a real alert:
+
+- **Slack** — the writeup is posted to a channel in real time.
+- **TheHive** — a case is opened with the AI summary, MITRE tags, command
+  transcript and a severity mapped from the notability score, and the source IP
+  is attached as an IOC observable.
+
+Routine scans never reach this path — they're always score 1 — so escalation
+fires only on attackers that actually did something. This reuses the same Wazuh
++ TheHive stack from my [Hivewire](https://wisnu.will0wstudio.online) SOC
+project, pointed at internet traffic instead of an internal network. Both
+integrations are optional and driven purely by config
+([`.env.example`](.env.example)).
 
 ## What the AI triage produces
 
@@ -111,7 +136,7 @@ so the AI's voice can be tuned without touching code.
 |------|--------------|
 | [`honeypot/`](honeypot) | Cowrie config + Docker Compose, and `deploy/` cloud-init for Oracle / GCP / DigitalOcean |
 | [`wazuh/`](wazuh) | Custom Cowrie detection rules, agent install script, manager rule installer |
-| [`triage-service/`](triage-service) | FastAPI service: indexer polling, session grouping, IP enrichment, Claude triage, Supabase writes |
+| [`triage-service/`](triage-service) | FastAPI service: indexer polling, session grouping, IP enrichment, Claude triage, Supabase writes, Slack + TheHive escalation |
 | [`db/schema.sql`](db/schema.sql) | Supabase table + row-level security (public read-only) |
 | [`dashboard/`](dashboard) | Next.js public dashboard (Phase 4) |
 | `.env.example` | Every config value, grouped by service |
@@ -131,7 +156,8 @@ checklist), see [`honeypot/deploy/README.oracle.md`](honeypot/deploy/README.orac
 ## Tech
 
 Cowrie · Docker · Wazuh 4.9 · Tailscale · Python / FastAPI · Claude API
-(structured outputs) · Supabase (Postgres + RLS) · Next.js · Vercel
+(structured outputs) · Supabase (Postgres + RLS) · Next.js · Vercel · Slack ·
+TheHive · MITRE ATT&CK
 
 ## Safety & ethics
 

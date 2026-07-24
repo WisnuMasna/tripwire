@@ -77,6 +77,28 @@ API — Claude is spent only on sessions where the attacker ran commands,
 transferred a file, or attempted a tunnel. `/health` reports the split via
 `triaged_by_ai` and `triaged_heuristically`.
 
+## SOAR escalation (Slack + TheHive)
+
+When a session scores at or above the threshold, it's escalated. Both
+integrations are optional — a blank secret disables that tier and never raises.
+
+| Tier | Env vars | Fires when |
+|------|----------|-----------|
+| Slack alert | `SLACK_WEBHOOK_URL`, `SLACK_NOTIFY_THRESHOLD` (4) | score ≥ threshold |
+| TheHive case | `THEHIVE_URL`, `THEHIVE_API_KEY`, `THEHIVE_CASE_THRESHOLD` (4) | score ≥ threshold |
+
+Test the wiring without waiting for a real score-5 attacker:
+
+```bash
+curl -X POST localhost:8000/test-slack     # {"sent": true, ...}
+curl -X POST localhost:8000/test-thehive   # {"enabled": true, "case_id": "~..."}
+```
+
+> **TheHive gotcha:** `admin@thehive.local` **cannot create cases** (it's a
+> platform admin in the `admin` org) and returns `403 Operation not permitted`.
+> The API key must belong to a user in an organisation that holds cases, with an
+> **analyst** profile.
+
 ## Verify end to end
 
 1. Trigger a session: `ssh root@<honeypot-ip>` (the honeypot), run a few commands, exit.
