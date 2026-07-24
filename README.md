@@ -62,7 +62,7 @@ flowchart TD
     DASH["Next.js dashboard on Vercel<br/>live feed, world map, notable attacks"]
     VIS["Public visitors"]
 
-    subgraph SOAR["Escalation - score &ge; 4 only"]
+    subgraph SOAR["Escalation - score 4+ only"]
         SLK["Slack alert"]
         TH["TheHive case<br/>+ IP as IOC observable"]
     end
