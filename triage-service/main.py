@@ -169,8 +169,11 @@ async def poll_loop() -> None:
                     _save_since(since)
                 await _flush()
                 state["pending"] = len(_pending)
+                state["last_error"] = None  # a clean cycle clears the last error
             except Exception as e:  # noqa: BLE001
-                state["last_error"] = f"poll: {e}"
+                # str(e) is empty for some httpx errors (e.g. timeouts), so
+                # include the type name to keep the message useful.
+                state["last_error"] = f"poll: {type(e).__name__}: {e}"
                 print(state["last_error"])
             await asyncio.sleep(settings.poll_interval_seconds)
     finally:
