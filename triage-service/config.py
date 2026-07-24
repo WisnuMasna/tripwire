@@ -28,5 +28,10 @@ class Settings(BaseSettings):
     poll_interval_seconds: int = 60
     session_grace_seconds: int = 180
 
+    # Slack escalation (SOAR tier 1). Blank = disabled. The webhook URL is a
+    # secret; keep it in .env only.
+    slack_webhook_url: str | None = None
+    slack_notify_threshold: int = 4
+
 
 settings = Settings()  # raises at import if required vars are missing

